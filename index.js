@@ -10,7 +10,11 @@ import { auth } from "./auth/auth.js";
 const app = express();
 const PORT = process.env.PORT || 5000;
 
+
+// ================================
 // Middleware
+// ================================
+
 app.use(cors({
   origin: "http://localhost:3000",
   credentials: true,
@@ -20,12 +24,19 @@ app.all("/api/auth/{*any}", toNodeHandler(auth));
 
 app.use(express.json());
 
+
+// ================================
 // MongoDB Collections
+// ================================
+
 const servicesCollection = db.collection("services");
 const bookingsCollection = db.collection("bookings");
 
 
+// ================================
 // Verify Logged-in User
+// ================================
+
 async function verifyUser(req, res, next) {
   try {
     const session = await auth.api.getSession({
@@ -51,13 +62,19 @@ async function verifyUser(req, res, next) {
 }
 
 
+// ================================
 // Test Route
+// ================================
+
 app.get('/', (req, res) => {
   res.send('FixMate API is running!');
 });
 
 
+// ================================
 // Featured Services API
+// ================================
+
 app.get('/api/services/featured', async (req, res) => {
   try {
     const services = await servicesCollection
@@ -81,7 +98,10 @@ app.get('/api/services/featured', async (req, res) => {
 });
 
 
+// ================================
 // Get All Approved and Available Services
+// ================================
+
 app.get('/api/services', async (req, res) => {
   try {
     const services = await servicesCollection
@@ -104,7 +124,10 @@ app.get('/api/services', async (req, res) => {
 });
 
 
+// ================================
 // Get Logged-in Technician's Own Services
+// ================================
+
 app.get("/api/technician/services/my", verifyUser, async (req, res) => {
   try {
     // Only Technician can access this API
@@ -138,7 +161,10 @@ app.get("/api/technician/services/my", verifyUser, async (req, res) => {
 });
 
 
-// Add New Service
+// ================================
+// Add New Service (POST)
+// ================================
+
 app.post("/api/technician/services", verifyUser, async (req, res) => {
   try {
     // Only Technician can add services
@@ -219,10 +245,117 @@ app.post("/api/technician/services", verifyUser, async (req, res) => {
 });
 
 
+// ================================
+// Update Technician's Own Service (PUT)
+// ================================
+
+app.put("/api/technician/services/:id", verifyUser, async (req, res) => {
+  try {
+    // Only Technician can update services
+    if (req.user.role !== "technician") {
+      return res.status(403).json({
+        message: "Only technicians can update services",
+      });
+    }
+
+    const { id } = req.params;
+
+    // Validate MongoDB ID
+    if (!ObjectId.isValid(id)) {
+      return res.status(400).json({
+        message: "Invalid service ID",
+      });
+    }
+
+    // Receive updated data from frontend
+    const {
+      title,
+      category,
+      description,
+      image,
+      serviceMode,
+      startingPrice,
+    } = req.body;
+
+    // Validate required fields
+    if (
+      !title?.trim() ||
+      !category ||
+      !description?.trim() ||
+      !image?.trim() ||
+      !serviceMode ||
+      startingPrice === undefined ||
+      startingPrice === ""
+    ) {
+      return res.status(400).json({
+        message: "Please provide all required fields",
+      });
+    }
+
+    // Validate starting price
+    if (
+      !Number.isFinite(Number(startingPrice)) ||
+      Number(startingPrice) <= 0
+    ) {
+      return res.status(400).json({
+        message: "Please provide a valid starting price",
+      });
+    }
+
+    // Update only the logged-in technician's own service
+    const result = await servicesCollection.updateOne(
+      {
+        _id: new ObjectId(id),
+        technicianEmail: req.user.email,
+      },
+      {
+        $set: {
+          title: title.trim(),
+          category,
+          description: description.trim(),
+          image: image.trim(),
+          serviceMode,
+          startingPrice: Number(startingPrice),
+          updatedAt: new Date(),
+        },
+      }
+    );
+
+    // Check whether the service belongs to this technician
+    if (result.matchedCount === 0) {
+      return res.status(404).json({
+        message: "Service not found or you are not authorized",
+      });
+    }
+
+    res.status(200).json({
+      success: true,
+      message: "Service updated successfully",
+    });
+
+  } catch (error) {
+    console.error("Update service error:", error);
+
+    res.status(500).json({
+      message: "Failed to update service",
+    });
+  }
+});
+
+
+// ================================
 // Get Single Service by ID
+// ================================
+
 app.get('/api/services/:id', async (req, res) => {
   try {
     const { id } = req.params;
+
+    if (!ObjectId.isValid(id)) {
+      return res.status(400).json({
+        message: "Invalid service ID"
+      });
+    }
 
     const service = await servicesCollection.findOne({
       _id: new ObjectId(id)
@@ -246,7 +379,10 @@ app.get('/api/services/:id', async (req, res) => {
 });
 
 
+// ================================
 // Create Booking API
+// ================================
+
 app.post("/api/bookings", verifyUser, async (req, res) => {
   try {
     // Only Customer can create booking
@@ -369,7 +505,10 @@ app.post("/api/bookings", verifyUser, async (req, res) => {
 });
 
 
+// ================================
 // Get Logged-in Customer's Bookings
+// ================================
+
 app.get("/api/bookings/my", verifyUser, async (req, res) => {
   try {
     // Only Customer can access this API
@@ -402,7 +541,10 @@ app.get("/api/bookings/my", verifyUser, async (req, res) => {
 });
 
 
+// ================================
 // Start Server
+// ================================
+
 async function startServer() {
   try {
     await client.connect();
