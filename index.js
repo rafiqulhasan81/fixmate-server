@@ -20,10 +20,10 @@ app.all("/api/auth/{*any}", toNodeHandler(auth));
 
 app.use(express.json());
 
-
-
+// MongoDB Collections
 const servicesCollection = db.collection("services");
 const bookingsCollection = db.collection("bookings");
+
 
 // Verify Logged-in User
 async function verifyUser(req, res, next) {
@@ -39,7 +39,6 @@ async function verifyUser(req, res, next) {
     }
 
     req.user = session.user;
-
     next();
 
   } catch (error) {
@@ -50,6 +49,7 @@ async function verifyUser(req, res, next) {
     });
   }
 }
+
 
 // Test Route
 app.get('/', (req, res) => {
@@ -107,22 +107,48 @@ app.get('/api/services', async (req, res) => {
 // Get Logged-in Technician's Own Services
 app.get("/api/technician/services/my", verifyUser, async (req, res) => {
   try {
-    // 1. শুধু Technician এই API ব্যবহার করতে পারবে
+    // Only Technician can access this API
     if (req.user.role !== "technician") {
       return res.status(403).json({
         message: "Only technicians can view their services",
       });
+    }
 
-      // Add New Service
+    // Find services using logged-in technician's email
+    const services = await servicesCollection
+      .find({
+        technicianEmail: req.user.email,
+      })
+      .sort({ createdAt: -1 })
+      .toArray();
+
+    // Send services to frontend
+    res.status(200).json({
+      success: true,
+      services,
+    });
+
+  } catch (error) {
+    console.error("Get technician services error:", error);
+
+    res.status(500).json({
+      message: "Failed to load your services",
+    });
+  }
+});
+
+
+// Add New Service
 app.post("/api/technician/services", verifyUser, async (req, res) => {
   try {
-    // Only technician can add services
+    // Only Technician can add services
     if (req.user.role !== "technician") {
       return res.status(403).json({
         message: "Only technicians can add services",
       });
     }
 
+    // Receive data from frontend
     const {
       title,
       category,
@@ -147,12 +173,17 @@ app.post("/api/technician/services", verifyUser, async (req, res) => {
       });
     }
 
-    if (Number(startingPrice) <= 0 || !Number.isFinite(Number(startingPrice))) {
+    // Validate starting price
+    if (
+      Number(startingPrice) <= 0 ||
+      !Number.isFinite(Number(startingPrice))
+    ) {
       return res.status(400).json({
         message: "Please provide a valid starting price",
       });
     }
 
+    // Create new service object
     const newService = {
       title,
       category,
@@ -169,6 +200,7 @@ app.post("/api/technician/services", verifyUser, async (req, res) => {
       createdAt: new Date(),
     };
 
+    // Save service in MongoDB
     const result = await servicesCollection.insertOne(newService);
 
     res.status(201).json({
@@ -182,30 +214,6 @@ app.post("/api/technician/services", verifyUser, async (req, res) => {
 
     res.status(500).json({
       message: "Failed to add service",
-    });
-  }
-});
-    }
-
-    // 2. Login করা Technician-এর Email দিয়ে নিজের Services খুঁজে বের করা
-    const services = await servicesCollection
-      .find({
-        technicianEmail: req.user.email,
-      })
-      .sort({ createdAt: -1 })
-      .toArray();
-
-    // 3. Services Frontend-এ পাঠানো
-    res.status(200).json({
-      success: true,
-      services,
-    });
-
-  } catch (error) {
-    console.error("Get technician services error:", error);
-
-    res.status(500).json({
-      message: "Failed to load your services",
     });
   }
 });
@@ -237,17 +245,18 @@ app.get('/api/services/:id', async (req, res) => {
   }
 });
 
+
 // Create Booking API
 app.post("/api/bookings", verifyUser, async (req, res) => {
   try {
-    // 1. শুধু Customer Booking করতে পারবে
+    // Only Customer can create booking
     if (req.user.role !== "customer") {
       return res.status(403).json({
         message: "Only customers can request a repair",
       });
     }
 
-    // 2. Frontend থেকে প্রয়োজনীয় তথ্য গ্রহণ
+    // Receive data from frontend
     const {
       serviceId,
       phone,
@@ -256,7 +265,7 @@ app.post("/api/bookings", verifyUser, async (req, res) => {
       problemDescription,
     } = req.body;
 
-    // 3. প্রয়োজনীয় তথ্য যাচাই
+    // Validate required fields
     if (
       !serviceId ||
       !phone?.trim() ||
@@ -281,7 +290,7 @@ app.post("/api/bookings", verifyUser, async (req, res) => {
       });
     }
 
-    // 4. Service-এর তথ্য MongoDB থেকে সংগ্রহ
+    // Find approved and available service
     const service = await servicesCollection.findOne({
       _id: new ObjectId(serviceId),
       approvalStatus: "approved",
@@ -294,14 +303,14 @@ app.post("/api/bookings", verifyUser, async (req, res) => {
       });
     }
 
-    // 5. Technician নিজের Service নিজে Request করতে পারবে না
+    // Prevent technician from booking own service
     if (service.technicianEmail === req.user.email) {
       return res.status(403).json({
         message: "You cannot request your own service",
       });
     }
 
-    // 6. একই Service-এর Active Booking আছে কি না যাচাই
+    // Check existing active booking
     const existingBooking = await bookingsCollection.findOne({
       serviceId: service._id.toString(),
       customerEmail: req.user.email,
@@ -316,7 +325,7 @@ app.post("/api/bookings", verifyUser, async (req, res) => {
       });
     }
 
-    // 7. Booking তৈরি
+    // Create booking object
     const booking = {
       serviceId: service._id.toString(),
       serviceTitle: service.title,
@@ -341,7 +350,7 @@ app.post("/api/bookings", verifyUser, async (req, res) => {
       createdAt: new Date(),
     };
 
-    // 8. MongoDB-তে সংরক্ষণ
+    // Save booking in MongoDB
     const result = await bookingsCollection.insertOne(booking);
 
     res.status(201).json({
@@ -359,19 +368,22 @@ app.post("/api/bookings", verifyUser, async (req, res) => {
   }
 });
 
+
 // Get Logged-in Customer's Bookings
 app.get("/api/bookings/my", verifyUser, async (req, res) => {
   try {
-    // Only customers can access this route
+    // Only Customer can access this API
     if (req.user.role !== "customer") {
       return res.status(403).json({
         message: "Only customers can view their bookings",
       });
     }
 
-    // Find bookings belonging to the logged-in customer
+    // Find customer's bookings
     const bookings = await bookingsCollection
-      .find({ customerEmail: req.user.email })
+      .find({
+        customerEmail: req.user.email
+      })
       .sort({ createdAt: -1 })
       .toArray();
 
