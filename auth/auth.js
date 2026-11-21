@@ -11,10 +11,10 @@ export const auth = betterAuth({
 
     additionalFields: {
       role: {
-        type: "string",
+        type: ["customer", "technician"],
         required: false,
         defaultValue: "customer",
-        input: false,
+        input: true,
       },
 
       phone: {
@@ -28,7 +28,5 @@ export const auth = betterAuth({
     enabled: true,
   },
 
-  trustedOrigins: [
-    "http://localhost:3000",
-  ],
+  trustedOrigins: ["http://localhost:3000"],
 });

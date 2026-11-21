@@ -103,6 +103,114 @@ app.get('/api/services', async (req, res) => {
   }
 });
 
+
+// Get Logged-in Technician's Own Services
+app.get("/api/technician/services/my", verifyUser, async (req, res) => {
+  try {
+    // 1. শুধু Technician এই API ব্যবহার করতে পারবে
+    if (req.user.role !== "technician") {
+      return res.status(403).json({
+        message: "Only technicians can view their services",
+      });
+
+      // Add New Service
+app.post("/api/technician/services", verifyUser, async (req, res) => {
+  try {
+    // Only technician can add services
+    if (req.user.role !== "technician") {
+      return res.status(403).json({
+        message: "Only technicians can add services",
+      });
+    }
+
+    const {
+      title,
+      category,
+      description,
+      image,
+      serviceMode,
+      startingPrice,
+    } = req.body;
+
+    // Validate required fields
+    if (
+      !title ||
+      !category ||
+      !description ||
+      !image ||
+      !serviceMode ||
+      startingPrice === undefined ||
+      startingPrice === ""
+    ) {
+      return res.status(400).json({
+        message: "Please provide all required fields",
+      });
+    }
+
+    if (Number(startingPrice) <= 0 || !Number.isFinite(Number(startingPrice))) {
+      return res.status(400).json({
+        message: "Please provide a valid starting price",
+      });
+    }
+
+    const newService = {
+      title,
+      category,
+      description,
+      image,
+      serviceMode,
+      startingPrice: Number(startingPrice),
+
+      technicianName: req.user.name,
+      technicianEmail: req.user.email,
+
+      approvalStatus: "pending",
+      isAvailable: true,
+      createdAt: new Date(),
+    };
+
+    const result = await servicesCollection.insertOne(newService);
+
+    res.status(201).json({
+      success: true,
+      message: "Service added successfully",
+      serviceId: result.insertedId,
+    });
+
+  } catch (error) {
+    console.error("Add service error:", error);
+
+    res.status(500).json({
+      message: "Failed to add service",
+    });
+  }
+});
+    }
+
+    // 2. Login করা Technician-এর Email দিয়ে নিজের Services খুঁজে বের করা
+    const services = await servicesCollection
+      .find({
+        technicianEmail: req.user.email,
+      })
+      .sort({ createdAt: -1 })
+      .toArray();
+
+    // 3. Services Frontend-এ পাঠানো
+    res.status(200).json({
+      success: true,
+      services,
+    });
+
+  } catch (error) {
+    console.error("Get technician services error:", error);
+
+    res.status(500).json({
+      message: "Failed to load your services",
+    });
+  }
+});
+
+
 // Get Single Service by ID
 app.get('/api/services/:id', async (req, res) => {
   try {
@@ -247,6 +355,36 @@ app.post("/api/bookings", verifyUser, async (req, res) => {
 
     res.status(500).json({
       message: "Failed to create booking",
+    });
+  }
+});
+
+// Get Logged-in Customer's Bookings
+app.get("/api/bookings/my", verifyUser, async (req, res) => {
+  try {
+    // Only customers can access this route
+    if (req.user.role !== "customer") {
+      return res.status(403).json({
+        message: "Only customers can view their bookings",
+      });
+    }
+
+    // Find bookings belonging to the logged-in customer
+    const bookings = await bookingsCollection
+      .find({ customerEmail: req.user.email })
+      .sort({ createdAt: -1 })
+      .toArray();
+
+    res.status(200).json({
+      success: true,
+      bookings,
+    });
+
+  } catch (error) {
+    console.error("Get bookings error:", error);
+
+    res.status(500).json({
+      message: "Failed to load bookings",
     });
   }
 });
