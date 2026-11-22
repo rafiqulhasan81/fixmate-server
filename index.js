@@ -339,6 +339,10 @@ app.put("/api/technician/services/:id", verifyUser, async (req, res) => {
           image: image.trim(),
           serviceMode,
           startingPrice: Number(startingPrice),
+
+          // Edited service must be approved again by Admin
+          approvalStatus: "pending",
+
           updatedAt: new Date(),
         },
       }
@@ -352,7 +356,7 @@ app.put("/api/technician/services/:id", verifyUser, async (req, res) => {
 
     res.status(200).json({
       success: true,
-      message: "Service updated successfully",
+      message: "Service updated successfully. Waiting for admin approval.",
     });
 
   } catch (error) {
