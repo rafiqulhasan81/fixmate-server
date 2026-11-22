@@ -2,7 +2,7 @@ import express from 'express';
 import 'dotenv/config';
 import cors from 'cors';
 import { ObjectId } from 'mongodb';
-import { client, db } from './config/db.js';
+import { db, connectDB } from './config/db.js';
 import { toNodeHandler, fromNodeHeaders } from "better-auth/node";
 import { auth } from "./auth/auth.js";
 
@@ -19,9 +19,22 @@ app.use(cors({
   credentials: true,
 }));
 
-app.all("/api/auth/{*any}", toNodeHandler(auth));
-
 app.use(express.json());
+
+app.use(async (req, res, next) => {
+  try {
+    await connectDB();
+    next();
+  } catch (error) {
+    console.error("Database connection error:", error);
+
+    res.status(500).json({
+      message: "Database connection failed",
+    });
+  }
+});
+
+app.all("/api/auth/{*any}", toNodeHandler(auth));
 
 
 // ================================
@@ -544,19 +557,10 @@ app.get("/api/bookings/my", verifyUser, async (req, res) => {
 // Start Server
 // ================================
 
-async function startServer() {
-  try {
-    await client.connect();
-
-    console.log("MongoDB connected successfully!");
-
-    app.listen(PORT, () => {
-      console.log(`FixMate server running on port ${PORT}`);
-    });
-
-  } catch (error) {
-    console.error("MongoDB connection failed:", error);
-  }
+if (!process.env.VERCEL) {
+  app.listen(PORT, () => {
+    console.log(`FixMate server running on port ${PORT}`);
+  });
 }
 
-startServer();
+export default app;
