@@ -24,6 +24,10 @@ app.use(cors({
 
 app.use(express.json());
 
+app.get('/', (req, res) => {
+  res.send('FixMate API is running!');
+});
+
 app.use(async (req, res, next) => {
   try {
     await connectDB();
@@ -81,9 +85,7 @@ async function verifyUser(req, res, next) {
 // Test Route
 // ================================
 
-app.get('/', (req, res) => {
-  res.send('FixMate API is running!');
-});
+
 
 
 // ================================
