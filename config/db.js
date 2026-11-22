@@ -17,6 +17,7 @@ const connectDB = async () => {
   }
 
   await connectionPromise;
+  console.log("MongoDB Connected Successfully!");
 
   return db;
 };

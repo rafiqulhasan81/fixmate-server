@@ -1,4 +1,3 @@
-
 import { betterAuth } from "better-auth";
 import { mongodbAdapter } from "@better-auth/mongo-adapter";
 import { db } from "../config/db.js";
@@ -20,6 +19,7 @@ export const auth = betterAuth({
       phone: {
         type: "string",
         required: false,
+        input: true,
       },
     },
   },

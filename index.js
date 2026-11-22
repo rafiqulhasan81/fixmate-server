@@ -1,3 +1,4 @@
+
 import express from 'express';
 import 'dotenv/config';
 import cors from 'cors';
@@ -24,9 +25,19 @@ app.use(cors({
 
 app.use(express.json());
 
+
+// ================================
+// Root API
+// ================================
+
 app.get('/', (req, res) => {
   res.send('FixMate API is running!');
 });
+
+
+// ================================
+// Database Connection Middleware
+// ================================
 
 app.use(async (req, res, next) => {
   try {
@@ -40,6 +51,11 @@ app.use(async (req, res, next) => {
     });
   }
 });
+
+
+// ================================
+// Better Auth API
+// ================================
 
 app.all("/api/auth/{*any}", toNodeHandler(auth));
 
@@ -85,7 +101,12 @@ async function verifyUser(req, res, next) {
 // Test Route
 // ================================
 
-
+app.get("/api/test-availability", (req, res) => {
+  res.json({
+    success: true,
+    message: "Availability route area is working!",
+  });
+});
 
 
 // ================================
@@ -147,14 +168,12 @@ app.get('/api/services', async (req, res) => {
 
 app.get("/api/technician/services/my", verifyUser, async (req, res) => {
   try {
-    // Only Technician can access this API
     if (req.user.role !== "technician") {
       return res.status(403).json({
         message: "Only technicians can view their services",
       });
     }
 
-    // Find services using logged-in technician's email
     const services = await servicesCollection
       .find({
         technicianEmail: req.user.email,
@@ -162,7 +181,6 @@ app.get("/api/technician/services/my", verifyUser, async (req, res) => {
       .sort({ createdAt: -1 })
       .toArray();
 
-    // Send services to frontend
     res.status(200).json({
       success: true,
       services,
@@ -184,14 +202,12 @@ app.get("/api/technician/services/my", verifyUser, async (req, res) => {
 
 app.post("/api/technician/services", verifyUser, async (req, res) => {
   try {
-    // Only Technician can add services
     if (req.user.role !== "technician") {
       return res.status(403).json({
         message: "Only technicians can add services",
       });
     }
 
-    // Receive data from frontend
     const {
       title,
       category,
@@ -201,7 +217,6 @@ app.post("/api/technician/services", verifyUser, async (req, res) => {
       startingPrice,
     } = req.body;
 
-    // Validate required fields
     if (
       !title ||
       !category ||
@@ -216,7 +231,6 @@ app.post("/api/technician/services", verifyUser, async (req, res) => {
       });
     }
 
-    // Validate starting price
     if (
       Number(startingPrice) <= 0 ||
       !Number.isFinite(Number(startingPrice))
@@ -226,7 +240,6 @@ app.post("/api/technician/services", verifyUser, async (req, res) => {
       });
     }
 
-    // Create new service object
     const newService = {
       title,
       category,
@@ -243,7 +256,6 @@ app.post("/api/technician/services", verifyUser, async (req, res) => {
       createdAt: new Date(),
     };
 
-    // Save service in MongoDB
     const result = await servicesCollection.insertOne(newService);
 
     res.status(201).json({
@@ -268,7 +280,6 @@ app.post("/api/technician/services", verifyUser, async (req, res) => {
 
 app.put("/api/technician/services/:id", verifyUser, async (req, res) => {
   try {
-    // Only Technician can update services
     if (req.user.role !== "technician") {
       return res.status(403).json({
         message: "Only technicians can update services",
@@ -277,14 +288,12 @@ app.put("/api/technician/services/:id", verifyUser, async (req, res) => {
 
     const { id } = req.params;
 
-    // Validate MongoDB ID
     if (!ObjectId.isValid(id)) {
       return res.status(400).json({
         message: "Invalid service ID",
       });
     }
 
-    // Receive updated data from frontend
     const {
       title,
       category,
@@ -294,7 +303,6 @@ app.put("/api/technician/services/:id", verifyUser, async (req, res) => {
       startingPrice,
     } = req.body;
 
-    // Validate required fields
     if (
       !title?.trim() ||
       !category ||
@@ -309,7 +317,6 @@ app.put("/api/technician/services/:id", verifyUser, async (req, res) => {
       });
     }
 
-    // Validate starting price
     if (
       !Number.isFinite(Number(startingPrice)) ||
       Number(startingPrice) <= 0
@@ -319,7 +326,6 @@ app.put("/api/technician/services/:id", verifyUser, async (req, res) => {
       });
     }
 
-    // Update only the logged-in technician's own service
     const result = await servicesCollection.updateOne(
       {
         _id: new ObjectId(id),
@@ -338,7 +344,6 @@ app.put("/api/technician/services/:id", verifyUser, async (req, res) => {
       }
     );
 
-    // Check whether the service belongs to this technician
     if (result.matchedCount === 0) {
       return res.status(404).json({
         message: "Service not found or you are not authorized",
@@ -355,6 +360,113 @@ app.put("/api/technician/services/:id", verifyUser, async (req, res) => {
 
     res.status(500).json({
       message: "Failed to update service",
+    });
+  }
+});
+
+
+// ================================
+// Delete Technician's Own Service (DELETE)
+// ================================
+
+app.delete("/api/technician/services/:id", verifyUser, async (req, res) => {
+  try {
+    if (req.user.role !== "technician") {
+      return res.status(403).json({
+        message: "Only technicians can delete services",
+      });
+    }
+
+    const { id } = req.params;
+
+    if (!ObjectId.isValid(id)) {
+      return res.status(400).json({
+        message: "Invalid service ID",
+      });
+    }
+
+    const result = await servicesCollection.deleteOne({
+      _id: new ObjectId(id),
+      technicianEmail: req.user.email,
+    });
+
+    if (result.deletedCount === 0) {
+      return res.status(404).json({
+        message: "Service not found or you are not authorized",
+      });
+    }
+
+    res.status(200).json({
+      success: true,
+      message: "Service deleted successfully",
+    });
+
+  } catch (error) {
+    console.error("Delete service error:", error);
+
+    res.status(500).json({
+      message: "Failed to delete service",
+    });
+  }
+});
+
+
+// ================================
+// Toggle Technician Service Availability (PATCH)
+// ================================
+
+app.patch("/api/technician/services/:id/availability", verifyUser, async (req, res) => {
+  try {
+    if (req.user.role !== "technician") {
+      return res.status(403).json({
+        message: "Only technicians can update availability",
+      });
+    }
+
+    const { id } = req.params;
+    const { isAvailable } = req.body;
+
+    if (!ObjectId.isValid(id)) {
+      return res.status(400).json({
+        message: "Invalid service ID",
+      });
+    }
+
+    if (typeof isAvailable !== "boolean") {
+      return res.status(400).json({
+        message: "Availability must be true or false",
+      });
+    }
+
+    const result = await servicesCollection.updateOne(
+      {
+        _id: new ObjectId(id),
+        technicianEmail: req.user.email,
+      },
+      {
+        $set: {
+          isAvailable,
+          updatedAt: new Date(),
+        },
+      }
+    );
+
+    if (result.matchedCount === 0) {
+      return res.status(404).json({
+        message: "Service not found or you are not authorized",
+      });
+    }
+
+    res.status(200).json({
+      success: true,
+      message: "Availability updated successfully",
+    });
+
+  } catch (error) {
+    console.error("Availability update error:", error);
+
+    res.status(500).json({
+      message: "Failed to update availability",
     });
   }
 });
@@ -402,14 +514,12 @@ app.get('/api/services/:id', async (req, res) => {
 
 app.post("/api/bookings", verifyUser, async (req, res) => {
   try {
-    // Only Customer can create booking
     if (req.user.role !== "customer") {
       return res.status(403).json({
         message: "Only customers can request a repair",
       });
     }
 
-    // Receive data from frontend
     const {
       serviceId,
       phone,
@@ -418,7 +528,6 @@ app.post("/api/bookings", verifyUser, async (req, res) => {
       problemDescription,
     } = req.body;
 
-    // Validate required fields
     if (
       !serviceId ||
       !phone?.trim() ||
@@ -443,7 +552,6 @@ app.post("/api/bookings", verifyUser, async (req, res) => {
       });
     }
 
-    // Find approved and available service
     const service = await servicesCollection.findOne({
       _id: new ObjectId(serviceId),
       approvalStatus: "approved",
@@ -456,14 +564,12 @@ app.post("/api/bookings", verifyUser, async (req, res) => {
       });
     }
 
-    // Prevent technician from booking own service
     if (service.technicianEmail === req.user.email) {
       return res.status(403).json({
         message: "You cannot request your own service",
       });
     }
 
-    // Check existing active booking
     const existingBooking = await bookingsCollection.findOne({
       serviceId: service._id.toString(),
       customerEmail: req.user.email,
@@ -478,7 +584,6 @@ app.post("/api/bookings", verifyUser, async (req, res) => {
       });
     }
 
-    // Create booking object
     const booking = {
       serviceId: service._id.toString(),
       serviceTitle: service.title,
@@ -503,7 +608,6 @@ app.post("/api/bookings", verifyUser, async (req, res) => {
       createdAt: new Date(),
     };
 
-    // Save booking in MongoDB
     const result = await bookingsCollection.insertOne(booking);
 
     res.status(201).json({
@@ -523,19 +627,131 @@ app.post("/api/bookings", verifyUser, async (req, res) => {
 
 
 // ================================
+// Get Technician's Service Requests
+// ================================
+
+app.get("/api/technician/bookings/requests", verifyUser, async (req, res) => {
+  try {
+    if (req.user.role !== "technician") {
+      return res.status(403).json({
+        message: "Only technicians can view service requests",
+      });
+    }
+
+    const bookings = await bookingsCollection
+      .find({
+        technicianEmail: req.user.email,
+      })
+      .sort({ createdAt: -1 })
+      .toArray();
+
+    res.status(200).json({
+      success: true,
+      bookings,
+    });
+
+  } catch (error) {
+    console.error("Technician service requests error:", error);
+
+    res.status(500).json({
+      message: "Failed to load service requests",
+    });
+  }
+});
+
+
+// ================================
+// Update Technician Booking Status
+// ================================
+
+app.patch("/api/technician/bookings/:id/status", verifyUser, async (req, res) => {
+  try {
+    if (req.user.role !== "technician") {
+      return res.status(403).json({
+        message: "Only technicians can update booking status",
+      });
+    }
+
+    const { id } = req.params;
+    const { status } = req.body;
+
+    if (!ObjectId.isValid(id)) {
+      return res.status(400).json({
+        message: "Invalid booking ID",
+      });
+    }
+
+    const booking = await bookingsCollection.findOne({
+      _id: new ObjectId(id),
+      technicianEmail: req.user.email,
+    });
+
+    if (!booking) {
+      return res.status(404).json({
+        message: "Booking not found or you are not authorized",
+      });
+    }
+
+    const allowedTransitions = {
+      requested: ["accepted", "rejected"],
+      accepted: ["in-progress"],
+      "in-progress": ["completed"],
+    };
+
+    if (!allowedTransitions[booking.status]?.includes(status)) {
+      return res.status(400).json({
+        message: "This status transition is not allowed",
+      });
+    }
+
+    const result = await bookingsCollection.updateOne(
+      {
+        _id: new ObjectId(id),
+        technicianEmail: req.user.email,
+        status: booking.status,
+      },
+      {
+        $set: {
+          status,
+          updatedAt: new Date(),
+        },
+      }
+    );
+
+    if (result.modifiedCount === 0) {
+      return res.status(409).json({
+        message: "Booking status has already changed",
+      });
+    }
+
+    res.status(200).json({
+      success: true,
+      message: "Booking status updated successfully",
+      status,
+    });
+
+  } catch (error) {
+    console.error("Booking status update error:", error);
+
+    res.status(500).json({
+      message: "Failed to update booking status",
+    });
+  }
+});
+
+
+// ================================
 // Get Logged-in Customer's Bookings
 // ================================
 
 app.get("/api/bookings/my", verifyUser, async (req, res) => {
   try {
-    // Only Customer can access this API
     if (req.user.role !== "customer") {
       return res.status(403).json({
         message: "Only customers can view their bookings",
       });
     }
 
-    // Find customer's bookings
     const bookings = await bookingsCollection
       .find({
         customerEmail: req.user.email
@@ -563,9 +779,17 @@ app.get("/api/bookings/my", verifyUser, async (req, res) => {
 // ================================
 
 if (!process.env.VERCEL) {
-  app.listen(PORT, () => {
-    console.log(`FixMate server running on port ${PORT}`);
-  });
+  connectDB()
+    .then(() => {
+      console.log("MongoDB Connected Successfully!");
+
+      app.listen(PORT, () => {
+        console.log(`FixMate server running on port ${PORT}`);
+      });
+    })
+    .catch((error) => {
+      console.error("MongoDB Connection Failed:", error);
+    });
 }
 
 export default app;
