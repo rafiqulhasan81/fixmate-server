@@ -747,6 +747,7 @@ app.patch("/api/technician/bookings/:id/status", verifyUser, async (req, res) =>
   }
 });
 
+
 // ================================
 // Update Final Amount
 // ================================
@@ -812,20 +813,21 @@ app.patch("/api/technician/bookings/:id/final-amount", verifyUser, async (req, r
   }
 });
 
+
 // ================================
-// Update Final Amount
+// Update Payment Status
 // ================================
 
-app.patch("/api/technician/bookings/:id/final-amount", verifyUser, async (req, res) => {
+app.patch("/api/technician/bookings/:id/payment-status", verifyUser, async (req, res) => {
   try {
     if (req.user.role !== "technician") {
       return res.status(403).json({
-        message: "Only technicians can update final amount",
+        message: "Only technicians can update payment status",
       });
     }
 
     const { id } = req.params;
-    const { finalAmount } = req.body;
+    const { paymentStatus } = req.body;
 
     if (!ObjectId.isValid(id)) {
       return res.status(400).json({
@@ -833,13 +835,9 @@ app.patch("/api/technician/bookings/:id/final-amount", verifyUser, async (req, r
       });
     }
 
-    if (
-      typeof finalAmount !== "number" ||
-      !Number.isFinite(finalAmount) ||
-      finalAmount <= 0
-    ) {
+    if (paymentStatus !== "paid") {
       return res.status(400).json({
-        message: "Please provide a valid final amount",
+        message: "Invalid payment status",
       });
     }
 
@@ -848,10 +846,11 @@ app.patch("/api/technician/bookings/:id/final-amount", verifyUser, async (req, r
         _id: new ObjectId(id),
         technicianEmail: req.user.email,
         status: "completed",
+        finalAmount: { $gt: 0 },
       },
       {
         $set: {
-          finalAmount,
+          paymentStatus: "paid",
           updatedAt: new Date(),
         },
       }
@@ -859,20 +858,20 @@ app.patch("/api/technician/bookings/:id/final-amount", verifyUser, async (req, r
 
     if (result.matchedCount === 0) {
       return res.status(404).json({
-        message: "Completed booking not found or you are not authorized",
+        message: "Completed booking with final amount not found or you are not authorized",
       });
     }
 
     res.status(200).json({
       success: true,
-      message: "Final amount updated successfully",
+      message: "Payment status updated successfully",
     });
 
   } catch (error) {
-    console.error("Final amount update error:", error);
+    console.error("Payment status update error:", error);
 
     res.status(500).json({
-      message: "Failed to update final amount",
+      message: "Failed to update payment status",
     });
   }
 });
