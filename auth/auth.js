@@ -1,3 +1,4 @@
+
 import { betterAuth } from "better-auth";
 import { mongodbAdapter } from "@better-auth/mongo-adapter";
 import { db } from "../config/db.js";
@@ -10,10 +11,10 @@ export const auth = betterAuth({
 
     additionalFields: {
       role: {
-        type: ["customer", "technician"],
+        type: ["customer", "technician", "admin"],
         required: false,
         defaultValue: "customer",
-        input: true,
+        input: false,
       },
 
       phone: {

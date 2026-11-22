@@ -98,6 +98,27 @@ async function verifyUser(req, res, next) {
 
 
 // ================================
+// Verify Admin User
+// ================================
+
+function verifyAdmin(req, res, next) {
+  if (!req.user) {
+    return res.status(401).json({
+      message: "Please login first",
+    });
+  }
+
+  if (req.user.role !== "admin") {
+    return res.status(403).json({
+      message: "Access denied. Admin only.",
+    });
+  }
+
+  next();
+}
+
+
+// ================================
 // Test Route
 // ================================
 
@@ -344,9 +365,7 @@ app.put("/api/technician/services/:id", verifyUser, async (req, res) => {
           serviceMode,
           startingPrice: Number(startingPrice),
 
-          // Edited service must be approved again by Admin
           approvalStatus: "pending",
-
           updatedAt: new Date(),
         },
       }
