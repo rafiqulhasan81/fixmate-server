@@ -3,8 +3,8 @@ import 'dotenv/config';
 import cors from 'cors';
 import { ObjectId } from 'mongodb';
 import { db, connectDB } from './config/db.js';
-import { toNodeHandler, fromNodeHeaders } from "better-auth/node";
-import { auth } from "./auth/auth.js";
+// import { toNodeHandler, fromNodeHeaders } from "better-auth/node";
+// import { auth } from "./auth/auth.js";
 
 const app = express();
 const PORT = process.env.PORT || 5000;
@@ -41,7 +41,7 @@ app.use(async (req, res, next) => {
   }
 });
 
-app.all("/api/auth/{*any}", toNodeHandler(auth));
+// app.all("/api/auth/{*any}", toNodeHandler(auth));
 
 
 // ================================
