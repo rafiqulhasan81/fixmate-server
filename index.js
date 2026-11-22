@@ -67,6 +67,7 @@ app.all("/api/auth/{*any}", toNodeHandler(auth));
 const servicesCollection = db.collection("services");
 const bookingsCollection = db.collection("bookings");
 const usersCollection = db.collection("users");
+const paymentsCollection = db.collection("payments");
 
 
 // ================================
@@ -125,15 +126,12 @@ function verifyAdmin(req, res, next) {
 
 app.get("/api/admin/overview", verifyUser, verifyAdmin, async (req, res) => {
   try {
-    // Count Total Users
     const totalUsers = await usersCollection.countDocuments();
 
-    // Count Total Technicians
     const totalTechnicians = await usersCollection.countDocuments({
       role: "technician",
     });
 
-    // Count Pending Services
     const pendingServices = await servicesCollection.countDocuments({
       approvalStatus: "pending",
     });
@@ -156,6 +154,7 @@ app.get("/api/admin/overview", verifyUser, verifyAdmin, async (req, res) => {
     });
   }
 });
+
 
 // ================================
 // Admin: Get All Users API
@@ -194,6 +193,7 @@ app.get("/api/admin/users", verifyUser, verifyAdmin, async (req, res) => {
   }
 });
 
+
 // ================================
 // Admin: Update User Role API
 // ================================
@@ -203,7 +203,6 @@ app.patch("/api/admin/users/:id/role", verifyUser, verifyAdmin, async (req, res)
     const { id } = req.params;
     const { role } = req.body;
 
-    // Validate User ID
     if (!ObjectId.isValid(id)) {
       return res.status(400).json({
         success: false,
@@ -211,7 +210,6 @@ app.patch("/api/admin/users/:id/role", verifyUser, verifyAdmin, async (req, res)
       });
     }
 
-    // Prevent Admin from changing their own role
     if (id === req.user.id) {
       return res.status(403).json({
         success: false,
@@ -219,7 +217,6 @@ app.patch("/api/admin/users/:id/role", verifyUser, verifyAdmin, async (req, res)
       });
     }
 
-    // Allow only these roles
     const allowedRoles = ["customer", "technician", "admin"];
 
     if (!allowedRoles.includes(role)) {
@@ -229,7 +226,6 @@ app.patch("/api/admin/users/:id/role", verifyUser, verifyAdmin, async (req, res)
       });
     }
 
-    // Update User Role
     const result = await usersCollection.updateOne(
       {
         _id: new ObjectId(id),
@@ -264,6 +260,7 @@ app.patch("/api/admin/users/:id/role", verifyUser, verifyAdmin, async (req, res)
   }
 });
 
+
 // ================================
 // Admin: Update Service Approval Status API
 // ================================
@@ -277,7 +274,6 @@ app.patch(
       const { id } = req.params;
       const { approvalStatus } = req.body;
 
-      // Validate MongoDB ObjectId
       if (!ObjectId.isValid(id)) {
         return res.status(400).json({
           success: false,
@@ -285,7 +281,6 @@ app.patch(
         });
       }
 
-      // Only approved or rejected status is allowed
       if (!["approved", "rejected"].includes(approvalStatus)) {
         return res.status(400).json({
           success: false,
@@ -326,6 +321,7 @@ app.patch(
   }
 );
 
+
 // ================================
 // Admin: Get All Services API
 // ================================
@@ -336,7 +332,6 @@ app.get("/api/admin/services", verifyUser, verifyAdmin, async (req, res) => {
 
     const filter = {};
 
-    // Filter services by approval status
     if (["pending", "approved", "rejected"].includes(status)) {
       filter.approvalStatus = status;
     }
@@ -363,6 +358,71 @@ app.get("/api/admin/services", verifyUser, verifyAdmin, async (req, res) => {
     });
   }
 });
+
+
+// ================================
+// Admin: Get All Bookings API
+// ================================
+
+app.get("/api/admin/bookings", verifyUser, verifyAdmin, async (req, res) => {
+  try {
+    const bookings = await bookingsCollection
+      .find({})
+      .sort({ createdAt: -1 })
+      .toArray();
+
+    res.status(200).json({
+      success: true,
+      bookings,
+    });
+
+  } catch (error) {
+    console.error("Admin get bookings error:", error);
+
+    res.status(500).json({
+      success: false,
+      message: "Failed to load bookings",
+    });
+  }
+});
+
+
+ 
+// ================================
+// Admin: Get All Transactions API
+// ================================
+
+app.get("/api/admin/transactions", verifyUser, verifyAdmin, async (req, res) => {
+  try {
+    const transactions = await paymentsCollection
+      .find({})
+      .sort({ paymentDate: -1 })
+      .toArray();
+
+    const totalTransactions = transactions.length;
+
+    const totalRevenue = transactions.reduce(
+      (total, transaction) => total + Number(transaction.amount || 0),
+      0
+    );
+
+    res.status(200).json({
+      success: true,
+      totalTransactions,
+      totalRevenue,
+      transactions,
+    });
+
+  } catch (error) {
+    console.error("Admin get transactions error:", error);
+
+    res.status(500).json({
+      success: false,
+      message: "Failed to load transactions",
+    });
+  }
+});
+
 
 
 // ================================
@@ -1081,7 +1141,7 @@ app.patch("/api/technician/bookings/:id/final-amount", verifyUser, async (req, r
 
 
 // ================================
-// Update Payment Status
+// Update Payment Status + Create Transaction
 // ================================
 
 app.patch("/api/technician/bookings/:id/payment-status", verifyUser, async (req, res) => {
@@ -1097,21 +1157,25 @@ app.patch("/api/technician/bookings/:id/payment-status", verifyUser, async (req,
 
     if (!ObjectId.isValid(id)) {
       return res.status(400).json({
+        success: false,
         message: "Invalid booking ID",
       });
     }
 
     if (paymentStatus !== "paid") {
       return res.status(400).json({
+        success: false,
         message: "Invalid payment status",
       });
     }
 
+    // Step 1: Mark the eligible unpaid booking as paid
     const result = await bookingsCollection.updateOne(
       {
         _id: new ObjectId(id),
         technicianEmail: req.user.email,
         status: "completed",
+        paymentStatus: "unpaid",
         finalAmount: { $gt: 0 },
       },
       {
@@ -1122,21 +1186,77 @@ app.patch("/api/technician/bookings/:id/payment-status", verifyUser, async (req,
       }
     );
 
-    if (result.matchedCount === 0) {
+    if (result.modifiedCount === 0) {
       return res.status(404).json({
-        message: "Completed booking with final amount not found or you are not authorized",
+        success: false,
+        message: "Booking not found, already paid, or not eligible for payment",
       });
+    }
+
+    try {
+      // Step 2: Get booking details
+      const booking = await bookingsCollection.findOne({
+        _id: new ObjectId(id),
+        technicianEmail: req.user.email,
+        paymentStatus: "paid",
+      });
+
+      if (!booking) {
+        throw new Error("Booking details not found");
+      }
+
+      // Step 3: Create transaction record
+      const transaction = {
+        bookingId: id,
+        transactionId: `FIX-${new ObjectId().toString().toUpperCase()}`,
+
+        serviceTitle: booking.serviceTitle,
+        category: booking.category,
+
+        customerName: booking.customerName,
+        customerEmail: booking.customerEmail,
+
+        technicianName: booking.technicianName,
+        technicianEmail: booking.technicianEmail,
+
+        amount: booking.finalAmount,
+        paymentStatus: "paid",
+
+        paymentDate: new Date(),
+        createdAt: new Date(),
+      };
+
+      await paymentsCollection.insertOne(transaction);
+
+    } catch (transactionError) {
+      // Step 4: Roll back booking status if transaction creation fails
+      await bookingsCollection.updateOne(
+        {
+          _id: new ObjectId(id),
+          technicianEmail: req.user.email,
+          paymentStatus: "paid",
+        },
+        {
+          $set: {
+            paymentStatus: "unpaid",
+            updatedAt: new Date(),
+          },
+        }
+      );
+
+      throw transactionError;
     }
 
     res.status(200).json({
       success: true,
-      message: "Payment status updated successfully",
+      message: "Payment updated and transaction created successfully",
     });
 
   } catch (error) {
     console.error("Payment status update error:", error);
 
     res.status(500).json({
+      success: false,
       message: "Failed to update payment status",
     });
   }
