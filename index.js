@@ -326,6 +326,10 @@ app.put("/api/technician/services/:id", verifyUser, async (req, res) => {
       });
     }
 
+    console.log("EDIT SERVICE API CALLED");
+    console.log("Service ID:", id);
+    console.log("Technician:", req.user.email);
+
     const result = await servicesCollection.updateOne(
       {
         _id: new ObjectId(id),
@@ -739,6 +743,136 @@ app.patch("/api/technician/bookings/:id/status", verifyUser, async (req, res) =>
 
     res.status(500).json({
       message: "Failed to update booking status",
+    });
+  }
+});
+
+// ================================
+// Update Final Amount
+// ================================
+
+app.patch("/api/technician/bookings/:id/final-amount", verifyUser, async (req, res) => {
+  try {
+    if (req.user.role !== "technician") {
+      return res.status(403).json({
+        message: "Only technicians can update final amount",
+      });
+    }
+
+    const { id } = req.params;
+    const { finalAmount } = req.body;
+
+    if (!ObjectId.isValid(id)) {
+      return res.status(400).json({
+        message: "Invalid booking ID",
+      });
+    }
+
+    if (
+      typeof finalAmount !== "number" ||
+      !Number.isFinite(finalAmount) ||
+      finalAmount <= 0
+    ) {
+      return res.status(400).json({
+        message: "Please provide a valid final amount",
+      });
+    }
+
+    const result = await bookingsCollection.updateOne(
+      {
+        _id: new ObjectId(id),
+        technicianEmail: req.user.email,
+        status: "completed",
+      },
+      {
+        $set: {
+          finalAmount,
+          updatedAt: new Date(),
+        },
+      }
+    );
+
+    if (result.matchedCount === 0) {
+      return res.status(404).json({
+        message: "Completed booking not found or you are not authorized",
+      });
+    }
+
+    res.status(200).json({
+      success: true,
+      message: "Final amount updated successfully",
+    });
+
+  } catch (error) {
+    console.error("Final amount update error:", error);
+
+    res.status(500).json({
+      message: "Failed to update final amount",
+    });
+  }
+});
+
+// ================================
+// Update Final Amount
+// ================================
+
+app.patch("/api/technician/bookings/:id/final-amount", verifyUser, async (req, res) => {
+  try {
+    if (req.user.role !== "technician") {
+      return res.status(403).json({
+        message: "Only technicians can update final amount",
+      });
+    }
+
+    const { id } = req.params;
+    const { finalAmount } = req.body;
+
+    if (!ObjectId.isValid(id)) {
+      return res.status(400).json({
+        message: "Invalid booking ID",
+      });
+    }
+
+    if (
+      typeof finalAmount !== "number" ||
+      !Number.isFinite(finalAmount) ||
+      finalAmount <= 0
+    ) {
+      return res.status(400).json({
+        message: "Please provide a valid final amount",
+      });
+    }
+
+    const result = await bookingsCollection.updateOne(
+      {
+        _id: new ObjectId(id),
+        technicianEmail: req.user.email,
+        status: "completed",
+      },
+      {
+        $set: {
+          finalAmount,
+          updatedAt: new Date(),
+        },
+      }
+    );
+
+    if (result.matchedCount === 0) {
+      return res.status(404).json({
+        message: "Completed booking not found or you are not authorized",
+      });
+    }
+
+    res.status(200).json({
+      success: true,
+      message: "Final amount updated successfully",
+    });
+
+  } catch (error) {
+    console.error("Final amount update error:", error);
+
+    res.status(500).json({
+      message: "Failed to update final amount",
     });
   }
 });
