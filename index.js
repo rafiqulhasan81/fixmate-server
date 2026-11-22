@@ -66,6 +66,7 @@ app.all("/api/auth/{*any}", toNodeHandler(auth));
 
 const servicesCollection = db.collection("services");
 const bookingsCollection = db.collection("bookings");
+const usersCollection = db.collection("users");
 
 
 // ================================
@@ -116,6 +117,252 @@ function verifyAdmin(req, res, next) {
 
   next();
 }
+
+
+// ================================
+// Admin Dashboard Overview API
+// ================================
+
+app.get("/api/admin/overview", verifyUser, verifyAdmin, async (req, res) => {
+  try {
+    // Count Total Users
+    const totalUsers = await usersCollection.countDocuments();
+
+    // Count Total Technicians
+    const totalTechnicians = await usersCollection.countDocuments({
+      role: "technician",
+    });
+
+    // Count Pending Services
+    const pendingServices = await servicesCollection.countDocuments({
+      approvalStatus: "pending",
+    });
+
+    res.status(200).json({
+      success: true,
+      stats: {
+        totalUsers,
+        totalTechnicians,
+        pendingServices,
+      },
+    });
+
+  } catch (error) {
+    console.error("Admin overview error:", error);
+
+    res.status(500).json({
+      success: false,
+      message: "Failed to load admin overview",
+    });
+  }
+});
+
+// ================================
+// Admin: Get All Users API
+// ================================
+
+app.get("/api/admin/users", verifyUser, verifyAdmin, async (req, res) => {
+  try {
+    const users = await usersCollection
+      .find(
+        {},
+        {
+          projection: {
+            name: 1,
+            email: 1,
+            role: 1,
+            image: 1,
+            createdAt: 1,
+          },
+        }
+      )
+      .sort({ createdAt: -1 })
+      .toArray();
+
+    res.status(200).json({
+      success: true,
+      users,
+    });
+
+  } catch (error) {
+    console.error("Admin get users error:", error);
+
+    res.status(500).json({
+      success: false,
+      message: "Failed to load users",
+    });
+  }
+});
+
+// ================================
+// Admin: Update User Role API
+// ================================
+
+app.patch("/api/admin/users/:id/role", verifyUser, verifyAdmin, async (req, res) => {
+  try {
+    const { id } = req.params;
+    const { role } = req.body;
+
+    // Validate User ID
+    if (!ObjectId.isValid(id)) {
+      return res.status(400).json({
+        success: false,
+        message: "Invalid user ID",
+      });
+    }
+
+    // Prevent Admin from changing their own role
+    if (id === req.user.id) {
+      return res.status(403).json({
+        success: false,
+        message: "You cannot change your own role",
+      });
+    }
+
+    // Allow only these roles
+    const allowedRoles = ["customer", "technician", "admin"];
+
+    if (!allowedRoles.includes(role)) {
+      return res.status(400).json({
+        success: false,
+        message: "Invalid role",
+      });
+    }
+
+    // Update User Role
+    const result = await usersCollection.updateOne(
+      {
+        _id: new ObjectId(id),
+      },
+      {
+        $set: {
+          role,
+          updatedAt: new Date(),
+        },
+      }
+    );
+
+    if (result.matchedCount === 0) {
+      return res.status(404).json({
+        success: false,
+        message: "User not found",
+      });
+    }
+
+    res.status(200).json({
+      success: true,
+      message: "User role updated successfully",
+    });
+
+  } catch (error) {
+    console.error("Admin update user role error:", error);
+
+    res.status(500).json({
+      success: false,
+      message: "Failed to update user role",
+    });
+  }
+});
+
+// ================================
+// Admin: Update Service Approval Status API
+// ================================
+
+app.patch(
+  "/api/admin/services/:id/status",
+  verifyUser,
+  verifyAdmin,
+  async (req, res) => {
+    try {
+      const { id } = req.params;
+      const { approvalStatus } = req.body;
+
+      // Validate MongoDB ObjectId
+      if (!ObjectId.isValid(id)) {
+        return res.status(400).json({
+          success: false,
+          message: "Invalid service ID",
+        });
+      }
+
+      // Only approved or rejected status is allowed
+      if (!["approved", "rejected"].includes(approvalStatus)) {
+        return res.status(400).json({
+          success: false,
+          message: "Invalid approval status",
+        });
+      }
+
+      const result = await servicesCollection.updateOne(
+        { _id: new ObjectId(id) },
+        {
+          $set: {
+            approvalStatus,
+            updatedAt: new Date(),
+          },
+        }
+      );
+
+      if (result.matchedCount === 0) {
+        return res.status(404).json({
+          success: false,
+          message: "Service not found",
+        });
+      }
+
+      res.status(200).json({
+        success: true,
+        message: `Service ${approvalStatus} successfully`,
+      });
+
+    } catch (error) {
+      console.error("Admin update service status error:", error);
+
+      res.status(500).json({
+        success: false,
+        message: "Failed to update service status",
+      });
+    }
+  }
+);
+
+// ================================
+// Admin: Get All Services API
+// ================================
+
+app.get("/api/admin/services", verifyUser, verifyAdmin, async (req, res) => {
+  try {
+    const { status } = req.query;
+
+    const filter = {};
+
+    // Filter services by approval status
+    if (["pending", "approved", "rejected"].includes(status)) {
+      filter.approvalStatus = status;
+    }
+
+    const services = await servicesCollection
+      .find(filter)
+      .sort({
+        approvalStatus: 1,
+        createdAt: -1,
+      })
+      .toArray();
+
+    res.status(200).json({
+      success: true,
+      services,
+    });
+
+  } catch (error) {
+    console.error("Admin get services error:", error);
+
+    res.status(500).json({
+      success: false,
+      message: "Failed to load services",
+    });
+  }
+});
 
 
 // ================================
