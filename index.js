@@ -2209,6 +2209,153 @@ app.put(
   }
 );
 
+// ================================
+// Update Technician's Own Service (PUT)
+// ================================
+
+app.put(
+  "/api/technician/services/:id",
+  verifyUser,
+  uploadServiceImage,
+  async (req, res) => {
+    try {
+      // Check technician role
+      if (req.user.role !== "technician") {
+        return res.status(403).json({
+          message: "Only technicians can update services",
+        });
+      }
+
+      const { id } = req.params;
+
+      if (!ObjectId.isValid(id)) {
+        return res.status(400).json({
+          message: "Invalid service ID",
+        });
+      }
+
+      // Find service owned by logged-in technician
+      const existingService = await servicesCollection.findOne({
+        _id: new ObjectId(id),
+        technicianEmail: req.user.email,
+      });
+
+      if (!existingService) {
+        return res.status(404).json({
+          message: "Service not found or you are not authorized",
+        });
+      }
+
+      const {
+        title,
+        category,
+        description,
+        serviceMode,
+        startingPrice,
+      } = req.body;
+
+      // Validate required fields
+      if (
+        !title?.trim() ||
+        !category ||
+        !description?.trim() ||
+        !serviceMode ||
+        startingPrice === undefined ||
+        startingPrice === ""
+      ) {
+        return res.status(400).json({
+          message: "Please provide all required fields",
+        });
+      }
+
+      // Validate price
+      if (
+        Number(startingPrice) <= 0 ||
+        !Number.isFinite(Number(startingPrice))
+      ) {
+        return res.status(400).json({
+          message: "Please provide a valid starting price",
+        });
+      }
+
+      // Keep existing image unless a new image is uploaded
+      let imageUrl = existingService.image;
+
+      if (req.file) {
+        if (!process.env.IMGBB_API_KEY) {
+          return res.status(500).json({
+            message: "ImgBB API Key is missing",
+          });
+        }
+
+        const formData = new FormData();
+
+        formData.append(
+          "image",
+          new Blob([req.file.buffer], {
+            type: req.file.mimetype,
+          }),
+          req.file.originalname
+        );
+
+        const uploadResponse = await fetch(
+          `https://api.imgbb.com/1/upload?key=${process.env.IMGBB_API_KEY}`,
+          {
+            method: "POST",
+            body: formData,
+          }
+        );
+
+        const uploadData = await uploadResponse.json();
+
+        if (!uploadResponse.ok || !uploadData.success) {
+          throw new Error(
+            uploadData.error?.message || "ImgBB image upload failed"
+          );
+        }
+
+        imageUrl = uploadData.data.url;
+      }
+
+      // Update service in MongoDB
+      await servicesCollection.updateOne(
+        {
+          _id: new ObjectId(id),
+          technicianEmail: req.user.email,
+        },
+        {
+          $set: {
+            title: title.trim(),
+            category,
+            description: description.trim(),
+            image: imageUrl,
+            serviceMode,
+            startingPrice: Number(startingPrice),
+
+            // Edited service requires admin approval again
+            approvalStatus: "pending",
+
+            updatedAt: new Date(),
+          },
+        }
+      );
+
+      res.status(200).json({
+        success: true,
+        message: "Service updated successfully",
+        image: imageUrl,
+      });
+
+    } catch (error) {
+      console.error("Update service error:", error);
+
+      res.status(500).json({
+        message: error.message || "Failed to update service",
+      });
+    }
+  }
+);
+
 
 // ================================
 // Delete Technician's Own Service (DELETE)
