@@ -443,14 +443,40 @@ app.get("/api/test-availability", (req, res) => {
 
 app.get('/api/services/featured', async (req, res) => {
   try {
-    const services = await servicesCollection
-      .find({
-        approvalStatus: "approved",
-        isAvailable: true
-      })
-      .sort({ createdAt: -1 })
-      .limit(6)
-      .toArray();
+    const services = await servicesCollection.aggregate([
+      {
+        $match: {
+          approvalStatus: "approved",
+          isAvailable: true
+        }
+      },
+      {
+        $sort: {
+          createdAt: -1
+        }
+      },
+      {
+        $group: {
+          _id: "$title",
+          service: {
+            $first: "$$ROOT"
+          }
+        }
+      },
+      {
+        $replaceRoot: {
+          newRoot: "$service"
+        }
+      },
+      {
+        $sort: {
+          createdAt: -1
+        }
+      },
+      {
+        $limit: 6
+      }
+    ]).toArray();
 
     res.status(200).json(services);
 
