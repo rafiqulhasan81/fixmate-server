@@ -1864,23 +1864,93 @@ app.get('/api/services/featured', async (req, res) => {
 // Get All Approved and Available Services
 // ================================
 
-app.get('/api/services', async (req, res) => {
+
+
+// ================================
+// Get All Approved Services
+// Server-Side Search, Filter & Sort
+// ================================
+
+app.get("/api/services", async (req, res) => {
   try {
+    // Step 1: URL থেকে query parameters সংগ্রহ
+    const {
+      search = "",
+      category = "",
+      serviceMode = "",
+      sort = "newest",
+    } = req.query;
+
+    // Step 2: MongoDB filter তৈরি
+    const filter = {
+      approvalStatus: "approved",
+      isAvailable: true,
+    };
+
+    // Step 3: Search by title or category
+    if (typeof search === "string" && search.trim()) {
+      const safeSearch = search.trim().replace(
+        /[.*+?^${}()|[\]\\]/g,
+        "\\$&"
+      );
+
+      const searchRegex = new RegExp(safeSearch, "i");
+
+      filter.$or = [
+        { title: searchRegex },
+        { category: searchRegex },
+      ];
+    }
+
+    // Step 4: Category filter
+    if (typeof category === "string" && category.trim()) {
+      const safeCategory = category.trim().replace(
+        /[.*+?^${}()|[\]\\]/g,
+        "\\$&"
+      );
+
+      filter.category = new RegExp(`^${safeCategory}$`, "i");
+    }
+
+    // Step 5: Service mode filter
+    if (typeof serviceMode === "string" && serviceMode.trim()) {
+      const safeMode = serviceMode.trim().replace(
+        /[.*+?^${}()|[\]\\]/g,
+        "\\$&"
+      );
+
+      filter.serviceMode = new RegExp(`^${safeMode}$`, "i");
+    }
+
+    // Step 6: Sort options
+    let sortOption = { createdAt: -1 };
+
+    if (sort === "price-low") {
+      sortOption = { startingPrice: 1 };
+    } else if (sort === "price-high") {
+      sortOption = { startingPrice: -1 };
+    } else if (sort === "newest") {
+      sortOption = { createdAt: -1 };
+    }
+
+    // Step 7: MongoDB-তে Search, Filter ও Sort
     const services = await servicesCollection
-      .find({
-        approvalStatus: "approved",
-        isAvailable: true
-      })
-      .sort({ createdAt: -1 })
+      .find(filter)
+      .sort(sortOption)
       .toArray();
 
-    res.status(200).json(services);
+    // Step 8: Response পাঠানো
+    res.status(200).json({
+      success: true,
+      services,
+    });
 
   } catch (error) {
-    console.error("All services error:", error);
+    console.error("Search and filter services error:", error);
 
     res.status(500).json({
-      message: "Failed to fetch services"
+      success: false,
+      message: "Failed to fetch services",
     });
   }
 });
