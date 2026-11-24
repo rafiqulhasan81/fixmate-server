@@ -30,7 +30,9 @@ export const auth = betterAuth({
     enabled: true,
   },
 
-  trustedOrigins: ["http://localhost:3000"],
+  trustedOrigins: ["http://localhost:3000",
+    "https://fixmate-client-flame.vercel.app",
+  ],
 
     plugins: [
     jwt({
