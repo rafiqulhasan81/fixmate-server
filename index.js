@@ -1391,7 +1391,7 @@ const uploadServiceImage = (req, res, next) => {
 app.use(cors({
   origin: [
     "http://localhost:3000",
-    "https://fixmate-client.vercel.app"
+    "https://fixmate-client-flame.vercel.app"
   ],
   credentials: true,
 }));
