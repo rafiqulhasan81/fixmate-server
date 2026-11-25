@@ -2670,6 +2670,9 @@ app.post("/api/bookings", verifyUser, async (req, res) => {
       createdAt: new Date(),
     };
 
+    console.log("SERVICE IMAGE:", service.image);
+    console.log("BOOKING IMAGE:", booking.serviceImage);
+
     const result = await bookingsCollection.insertOne(booking);
 
     res.status(201).json({
